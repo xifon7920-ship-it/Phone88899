@@ -1,0 +1,107 @@
+local Players = game:GetService("Players")
+local VU = game:GetService("VirtualUser")
+local player = Players.LocalPlayer
+local pg = player:WaitForChild("PlayerGui")
+local NAME = "ไอโฟนโปร"
+local farming = false
+
+-- คำที่ใช้ค้นหาจุดรับงาน/ทำงาน (ทั้งอังกฤษและไทย)
+local KEYWORDS = {
+    "apply","job","work","construct","build","weld","hammer","carry","collect",
+    "งาน","สมัคร","ก่อสร้าง","ทำงาน","เก็บ"
+}
+
+local function match(s)
+    s = string.lower(tostring(s or ""))
+    for _, k in ipairs(KEYWORDS) do
+        if s:find(k, 1, true) then return true end
+    end
+    return false
+end
+
+local function getHRP()
+    local c = player.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+-- กันหลุดเพราะ AFK
+player.Idled:Connect(function()
+    VU:CaptureController()
+    VU:ClickButton2(Vector2.new())
+end)
+
+-- หาจุดกดที่เกี่ยวกับงาน
+local function findPrompts()
+    local list = {}
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") and v.Enabled then
+            local part = v.Parent
+            if part and part:IsA("Attachment") then part = part.Parent end
+            if part and part:IsA("BasePart") then
+                local pname = part.Parent and part.Parent.Name
+                if match(v.ActionText) or match(v.ObjectText) or match(v.Name) or match(part.Name) or match(pname) then
+                    table.insert(list, { prompt = v, part = part })
+                end
+            end
+        end
+    end
+    return list
+end
+
+-- กดปุ่มสมัครงานในหน้าต่างที่เด้งขึ้นมา
+local function clickApply()
+    for _, b in ipairs(pg:GetDescendants()) do
+        if b:IsA("TextButton") and b.Visible then
+            local t = string.lower(b.Text)
+            if t:find("apply", 1, true) or t:find("สมัคร", 1, true) then
+                pcall(function()
+                    for _, c in ipairs(getconnections(b.Activated)) do c:Fire() end
+                    for _, c in ipairs(getconnections(b.MouseButton1Click)) do c:Fire() end
+                end)
+            end
+        end
+    end
+end
+
+-- ลูปฟาร์มหลัก
+local function farmLoop()
+    while farming do
+        local hrp = getHRP()
+        if hrp then
+            local items = findPrompts()
+            table.sort(items, function(a, b)
+                return (a.part.Position - hrp.Position).Magnitude
+                     < (b.part.Position - hrp.Position).Magnitude
+            end)
+            local t = items[1]
+            if t then
+                hrp.CFrame = t.part.CFrame * CFrame.new(0, 0, 3)
+                task.wait(0.3)
+                pcall(function()
+                    fireproximityprompt(t.prompt, math.max(t.prompt.HoldDuration, 0))
+                end)
+                task.wait(0.4)
+                clickApply()
+                VU:CaptureController()
+                VU:ClickButton1(Vector2.new(500, 400))
+                task.wait(math.max(t.prompt.HoldDuration, 0.5) + 0.5)
+            else
+                task.wait(1)
+            end
+        else
+            task.wait(1)
+        end
+    end
+end
+
+-- ล้างเมนูเก่าถ้ารันซ้ำ
+if pg:FindFirstChild(NAME) then pg[NAME]:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = NAME
+gui.ResetOnSpawn = false
+gui.Parent = pg
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 170, 0, 85)
+frame.Position = UDim2.
